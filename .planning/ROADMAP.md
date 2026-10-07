@@ -11,7 +11,7 @@ Build a modern, full-stack real-time messaging application inspired by WhatsApp 
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
 - [x] **Phase 1: Core Foundation & User Authentication** - Full-stack project setup, Prisma database models, JWT authentication, and user profile management.
-- [ ] **Phase 2: Real-Time Socket Architecture & 1-on-1 Messaging** - Socket.IO real-time transport, direct chat rooms, optimistic message rendering, and message history.
+- [x] **Phase 2: Real-Time Socket Architecture & 1-on-1 Messaging** - Socket.IO real-time transport, direct chat rooms, optimistic message rendering, and message history.
 - [ ] **Phase 3: Presence, Typing Indicators & Delivery/Read Status** - Live online/offline presence, last seen timestamps, debounced typing feedback, and checkmark read receipts.
 - [ ] **Phase 4: Group Conversations & Member Management** - Group chat creation, group admin management, member add/remove, and group room broadcasting.
 - [ ] **Phase 5: Media Sharing, File Attachments & Voice Notes** - Media upload pipeline, in-chat image/doc previews, Web MediaRecorder voice note recording and audio playback.
@@ -50,8 +50,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: Socket.IO server initialization, JWT socket handshake middleware, direct message events, and database persistence.
-- [ ] 02-02: SocketContext client integration, ChatList sidebar, ActiveChat bubble feed, and optimistic message dispatch.
+- [x] 02-01: Socket.IO server initialization, JWT socket handshake middleware, direct message events, and database persistence.
+- [x] 02-02: SocketContext client integration, ChatList sidebar, ActiveChat bubble feed, and optimistic message dispatch.
 
 ### Phase 3: Presence, Typing Indicators & Delivery/Read Status
 **Goal:** Deliver live user presence (online/last seen), debounced typing indicators, and sent/delivered/read receipt checkmarks.
@@ -161,8 +161,8 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Foundation & User Authentication | 0/2 | Planned | - |
-| 2. Real-Time Socket Architecture & 1-on-1 Messaging | 0/2 | Not started | - |
+| 1. Core Foundation & User Authentication | 2/2 | Complete | 2026-10-07 |
+| 2. Real-Time Socket Architecture & 1-on-1 Messaging | 2/2 | Complete | 2026-10-07 |
 | 3. Presence, Typing Indicators & Delivery/Read Status | 0/2 | Not started | - |
 | 4. Group Conversations & Member Management | 0/2 | Not started | - |
 | 5. Media Sharing, File Attachments & Voice Notes | 0/2 | Not started | - |
