@@ -82,8 +82,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 04-01: Group conversation API endpoints, admin authorization middleware, group membership mutators, and group room socket events.
-- [ ] 04-02: New Group modal, Group Info drawer with member list management, and group message bubble rendering with sender avatars.
+- [x] 04-01: Prisma schema extension (MemberRole, MessageType enums), group REST API, member management endpoints, and Socket.IO auto-join all conversation rooms.
+- [x] 04-02: Group chat UI — Create Group modal, ChatList group rows, Group Info Panel, member management panel, and system message rendering.
 
 ### Phase 5: Media Sharing, File Attachments & Voice Notes
 **Goal:** Deliver rich media messaging including in-chat image/video/document previews, file size validation, and Web MediaRecorder voice note recording & playback.
