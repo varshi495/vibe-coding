@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { useSocket } from '../../context/SocketContext';
 import { Avatar } from '../ui/Avatar';
-import { Search, SquarePen, X, UserPlus, LogOut, Loader2, MessageSquare } from 'lucide-react';
+import { Search, SquarePen, X, UserPlus, LogOut, Loader2, MessageSquare, Users } from 'lucide-react';
 import { formatDistanceToNow, isToday, isYesterday, format } from 'date-fns';
 import api from '../../services/api';
 import { ChatUser } from '../../types/chat';
+import { CreateGroupModal } from './CreateGroupModal';
 
 export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfile }) => {
   const { user, logout } = useAuth();
@@ -15,12 +16,14 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
     setActiveConversation,
     loadMessages,
     startConversationWithUser,
+    createGroupChat,
     typingUsers,
     onlineUsers,
   } = useSocket();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewChatPanel, setShowNewChatPanel] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [userSearchTerm, setUserSearchTerm] = useState('');
   const [searchResults, setSearchResults] = useState<ChatUser[]>([]);
   const [isSearchingUsers, setIsSearchingUsers] = useState(false);
@@ -48,7 +51,7 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
     return () => clearTimeout(timer);
   }, [userSearchTerm]);
 
-  // Handle starting a new conversation
+  // Handle starting a new 1-on-1 conversation
   const handleSelectUser = async (targetUser: ChatUser) => {
     setIsStartingChat(targetUser.id);
     try {
@@ -64,10 +67,16 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
     }
   };
 
-  // Filter existing conversations by name
-  const filteredConversations = conversations.filter((c) =>
-    c.otherMember?.name?.toLowerCase().includes(searchTerm.toLowerCase().trim())
-  );
+  // Filter existing conversations by name (1-on-1 name or group name)
+  const filteredConversations = conversations.filter((c) => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) return true;
+    if (c.isGroup) {
+      const gName = (c.groupInfo?.name || c.name || 'Group').toLowerCase();
+      return gName.includes(term);
+    }
+    return c.otherMember?.name?.toLowerCase().includes(term);
+  });
 
   const formatTimestamp = (dateStr?: string) => {
     if (!dateStr) return '';
@@ -94,6 +103,13 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
         </div>
 
         <div className="flex items-center gap-1 text-[#aebac1]">
+          <button
+            onClick={() => setShowCreateGroupModal(true)}
+            className="p-2 rounded-full hover:bg-[#202c33] hover:text-[#00a884] transition"
+            title="New Group Chat"
+          >
+            <Users size={20} />
+          </button>
           <button
             onClick={() => setShowNewChatPanel(true)}
             className="p-2 rounded-full hover:bg-[#202c33] hover:text-[#e9edef] transition"
@@ -136,18 +152,54 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
           <div className="p-8 text-center text-[#8696a0] text-sm">
             {searchTerm ? 'No chats found' : 'No conversations yet'}
             {!searchTerm && (
-              <button
-                onClick={() => setShowNewChatPanel(true)}
-                className="mt-4 block mx-auto text-[#00a884] font-medium hover:underline text-xs"
-              >
-                Start a chat with someone
-              </button>
+              <div className="flex flex-col gap-2 mt-4 items-center">
+                <button
+                  onClick={() => setShowNewChatPanel(true)}
+                  className="text-[#00a884] font-medium hover:underline text-xs"
+                >
+                  Start a 1-on-1 chat
+                </button>
+                <button
+                  onClick={() => setShowCreateGroupModal(true)}
+                  className="text-[#00a884] font-medium hover:underline text-xs"
+                >
+                  Create a new group
+                </button>
+              </div>
             )}
           </div>
         ) : (
           filteredConversations.map((conv) => {
             const isActive = conv.id === activeConversationId;
-            const other = conv.otherMember || { name: 'Unknown User' };
+            const isGroup = conv.isGroup;
+            const title = isGroup
+              ? conv.groupInfo?.name || conv.name || 'Group'
+              : conv.otherMember?.name || 'Unknown User';
+            const avatar = isGroup
+              ? conv.groupInfo?.avatar || conv.avatar
+              : conv.otherMember?.avatar;
+            const isOnline = !isGroup && conv.otherMember?.id
+              ? onlineUsers[conv.otherMember.id]?.isOnline
+              : false;
+
+            // Last message display text
+            const lastMsg = conv.lastMessage;
+            let previewText: React.ReactNode = <span className="italic">No messages yet</span>;
+            if (lastMsg) {
+              if (lastMsg.type === 'SYSTEM') {
+                previewText = <span className="italic text-gray-400">{lastMsg.content}</span>;
+              } else if (isGroup && lastMsg.sender?.name) {
+                const senderFirstName = lastMsg.sender.name.split(' ')[0];
+                previewText = (
+                  <span>
+                    <span className="text-[#d1d7db] font-medium">{senderFirstName}: </span>
+                    {lastMsg.content}
+                  </span>
+                );
+              } else {
+                previewText = lastMsg.content;
+              }
+            }
 
             return (
               <div
@@ -160,27 +212,47 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
                   isActive ? 'bg-[#2a3942]' : ''
                 }`}
               >
-                <Avatar
-                  name={other.name}
-                  src={other.avatar}
-                  size="md"
-                  showOnline={other.id ? onlineUsers[other.id]?.isOnline : false}
-                />
+                {/* Avatar */}
+                <div className="relative flex-shrink-0">
+                  {isGroup ? (
+                    <div className="w-11 h-11 rounded-full bg-[#202c33] border border-[#2a3942] flex items-center justify-center text-[#00a884] overflow-hidden">
+                      {avatar ? (
+                        <img src={avatar} alt={title} className="w-full h-full object-cover" />
+                      ) : (
+                        <Users className="w-5 h-5" />
+                      )}
+                    </div>
+                  ) : (
+                    <Avatar
+                      name={title}
+                      src={avatar}
+                      size="md"
+                      showOnline={isOnline}
+                    />
+                  )}
+                </div>
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
-                    <span className="text-[#e9edef] font-medium text-sm truncate">{other.name}</span>
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-[#e9edef] font-medium text-sm truncate">{title}</span>
+                      {isGroup && conv.groupInfo?.memberCount && (
+                        <span className="text-[10px] text-[#8696a0] font-normal px-1.5 py-0.5 bg-[#202c33] rounded-full flex-shrink-0">
+                          {conv.groupInfo.memberCount}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-xs text-[#8696a0] flex-shrink-0">
                       {formatTimestamp(conv.lastMessage?.createdAt || conv.updatedAt)}
                     </span>
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-[#8696a0] truncate max-w-[200px]">
+                    <p className="text-xs text-[#8696a0] truncate max-w-[210px]">
                       {typingUsers[conv.id] ? (
                         <span className="text-[#00a884] font-medium animate-pulse">typing...</span>
                       ) : (
-                        conv.lastMessage?.content || <span className="italic">No messages yet</span>
+                        previewText
                       )}
                     </p>
                     {conv.unreadCount > 0 && (
@@ -261,6 +333,17 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
           </div>
         </div>
       )}
+
+      {/* Create Group Modal */}
+      <CreateGroupModal
+        isOpen={showCreateGroupModal}
+        onClose={() => setShowCreateGroupModal(false)}
+        onCreateGroup={createGroupChat}
+        onSelectConversation={(id) => {
+          setActiveConversation(id);
+          loadMessages(id);
+        }}
+      />
     </aside>
   );
 };
