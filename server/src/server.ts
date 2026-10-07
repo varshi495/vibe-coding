@@ -1,7 +1,11 @@
 import express, { Request, Response } from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { createServer } from 'http';
 import authRoutes from './routes/authRoutes';
+import conversationRoutes from './routes/conversationRoutes';
+import userRoutes from './routes/userRoutes';
+import { initializeSocket } from './sockets/socketManager';
 
 dotenv.config();
 
@@ -15,18 +19,25 @@ app.use(cors({
 
 app.use(express.json());
 
-// Health check endpoint
-app.get('/api/health', (req: Request, res: Response) => {
+// Health check
+app.get('/api/health', (_req: Request, res: Response) => {
   res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Auth Routes
+// Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/conversations', conversationRoutes);
+app.use('/api/users', userRoutes);
 
-const isMain = process.argv[1] && (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js'));
+// HTTP server wraps Express so Socket.IO can share the same port
+export const httpServer = createServer(app);
+initializeSocket(httpServer);
+
+const isMain = process.argv[1] &&
+  (process.argv[1].endsWith('server.ts') || process.argv[1].endsWith('server.js'));
 
 if (isMain && process.env.NODE_ENV !== 'test') {
-  app.listen(PORT, () => {
+  httpServer.listen(PORT, () => {
     console.log(`[server] Server running on http://localhost:${PORT}`);
   });
 }
