@@ -10,7 +10,7 @@ Build a modern, full-stack real-time messaging application inspired by WhatsApp 
 - Integer phases (1, 2, 3): Planned milestone work
 - Decimal phases (2.1, 2.2): Urgent insertions (marked with INSERTED)
 
-- [ ] **Phase 1: Core Foundation & User Authentication** - Full-stack project setup, Prisma database models, JWT authentication, and user profile management.
+- [x] **Phase 1: Core Foundation & User Authentication** - Full-stack project setup, Prisma database models, JWT authentication, and user profile management.
 - [ ] **Phase 2: Real-Time Socket Architecture & 1-on-1 Messaging** - Socket.IO real-time transport, direct chat rooms, optimistic message rendering, and message history.
 - [ ] **Phase 3: Presence, Typing Indicators & Delivery/Read Status** - Live online/offline presence, last seen timestamps, debounced typing feedback, and checkmark read receipts.
 - [ ] **Phase 4: Group Conversations & Member Management** - Group chat creation, group admin management, member add/remove, and group room broadcasting.
@@ -34,8 +34,8 @@ Build a modern, full-stack real-time messaging application inspired by WhatsApp 
 **Plans**: 2 plans
 
 Plans:
-- [ ] 01-01: Express + TypeScript backend scaffold, Prisma relational models, bcrypt hashing, JWT auth routes, and profile API.
-- [ ] 01-02: React + Vite + Tailwind client scaffold, AuthContext, login/registration views, profile editor, and protected route wrapper.
+- [x] 01-01: Express + TypeScript backend scaffold, Prisma relational models, bcrypt hashing, JWT auth routes, and profile API.
+- [x] 01-02: React + Vite + Tailwind client scaffold, AuthContext, login/registration views, profile editor, and protected route wrapper.
 
 ### Phase 2: Real-Time Socket Architecture & 1-on-1 Messaging
 **Goal:** Deliver real-time bidirectional direct text messaging with instant optimistic message bubbles and conversation history over Socket.IO.
