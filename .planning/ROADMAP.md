@@ -12,7 +12,7 @@ Build a modern, full-stack real-time messaging application inspired by WhatsApp 
 
 - [x] **Phase 1: Core Foundation & User Authentication** - Full-stack project setup, Prisma database models, JWT authentication, and user profile management.
 - [x] **Phase 2: Real-Time Socket Architecture & 1-on-1 Messaging** - Socket.IO real-time transport, direct chat rooms, optimistic message rendering, and message history.
-- [ ] **Phase 3: Presence, Typing Indicators & Delivery/Read Status** - Live online/offline presence, last seen timestamps, debounced typing feedback, and checkmark read receipts.
+- [x] **Phase 3: Presence, Typing Indicators & Delivery/Read Status** - Live online/offline presence, last seen timestamps, debounced typing feedback, and checkmark read receipts.
 - [ ] **Phase 4: Group Conversations & Member Management** - Group chat creation, group admin management, member add/remove, and group room broadcasting.
 - [ ] **Phase 5: Media Sharing, File Attachments & Voice Notes** - Media upload pipeline, in-chat image/doc previews, Web MediaRecorder voice note recording and audio playback.
 - [ ] **Phase 6: Interactive Message Controls** - Emoji reactions, quote-replies, message editing, deletion tombstones, and message forwarding.
@@ -66,8 +66,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 03-01: Socket.IO presence tracker, disconnect lastSeen recorder, transient typing broadcaster, and MessageStatus receipt updates.
-- [ ] 03-02: Client presence hooks, typing bubble indicator, and checkmark receipt status components (single, double, blue double).
+- [x] 03-01: Socket.IO presence tracker, disconnect lastSeen recorder, transient typing broadcaster, and MessageStatus receipt updates.
+- [x] 03-02: Client presence hooks, typing bubble indicator, and checkmark receipt status components (single, double, blue double).
 
 ### Phase 4: Group Conversations & Member Management
 **Goal:** Deliver end-to-end group chat creation, role-based member administration (add/remove/leave), and group broadcast messaging.
@@ -163,7 +163,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 |-------|----------------|--------|-----------|
 | 1. Core Foundation & User Authentication | 2/2 | Complete | 2026-10-07 |
 | 2. Real-Time Socket Architecture & 1-on-1 Messaging | 2/2 | Complete | 2026-10-07 |
-| 3. Presence, Typing Indicators & Delivery/Read Status | 0/2 | Not started | - |
+| 3. Presence, Typing Indicators & Delivery/Read Status | 2/2 | Complete | 2026-10-07 |
 | 4. Group Conversations & Member Management | 0/2 | Not started | - |
 | 5. Media Sharing, File Attachments & Voice Notes | 0/2 | Not started | - |
 | 6. Interactive Message Controls | 0/2 | Not started | - |
