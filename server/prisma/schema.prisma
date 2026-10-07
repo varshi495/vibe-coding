@@ -54,6 +54,10 @@ model Message {
   senderId       String
   content        String
   type           MessageType   @default(TEXT)
+  mediaUrl       String?
+  mediaType      String?
+  fileName       String?
+  fileSize       Int?
   status         MessageStatus @default(SENT)
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -75,4 +79,8 @@ enum MemberRole {
 enum MessageType {
   TEXT
   SYSTEM
+  IMAGE
+  VIDEO
+  AUDIO
+  DOCUMENT
 }

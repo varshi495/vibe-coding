@@ -3,6 +3,8 @@ import { Server as SocketIOServer, Socket } from "socket.io";
 import { verifyToken } from "../config/jwt";
 import { prisma } from "../config/db";
 
+import { MessageType } from "@prisma/client";
+
 let io: SocketIOServer;
 
 interface AuthSocket extends Socket {
@@ -79,7 +81,7 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
       socket.join(`conv:${conversationId}`);
     });
 
-    // Handle outgoing message (both 1-on-1 and groups)
+    // Handle outgoing message (both 1-on-1 and groups, text and media)
     socket.on(
       "send_message",
       async (data: {
@@ -87,22 +89,48 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
         conversationId: string;
         recipientId?: string;
         content: string;
+        type?: MessageType;
+        mediaUrl?: string;
+        mediaType?: string;
+        fileName?: string;
+        fileSize?: number;
       }) => {
-        const { tempId, conversationId, recipientId, content } = data;
+        const {
+          tempId,
+          conversationId,
+          recipientId,
+          content,
+          type,
+          mediaUrl,
+          mediaType,
+          fileName,
+          fileSize,
+        } = data;
 
-        if (!content?.trim()) {
+        if (!content?.trim() && !mediaUrl) {
           socket.emit("message_error", { tempId, error: "Empty message" });
           return;
         }
+
+        const msgType: MessageType =
+          type && ["TEXT", "IMAGE", "VIDEO", "AUDIO", "DOCUMENT", "SYSTEM"].includes(type)
+            ? type
+            : mediaUrl
+            ? "DOCUMENT"
+            : "TEXT";
 
         try {
           const message = await prisma.message.create({
             data: {
               conversationId,
               senderId: userId,
-              content: content.trim(),
+              content: content?.trim() || fileName || "",
               status: "SENT",
-              type: "TEXT",
+              type: msgType,
+              mediaUrl: mediaUrl || null,
+              mediaType: mediaType || null,
+              fileName: fileName || null,
+              fileSize: fileSize ? Number(fileSize) : null,
             },
             include: {
               sender: {
