@@ -61,7 +61,7 @@ const runPresenceTests = async () => {
     assert(!!aliceToken && !!bobToken, 'Test user registration successful');
 
     // 3. Connect Alice Socket
-    let socketAlice: Socket;
+    let socketAlice!: Socket;
     let aliceOnlineEventReceived = false;
 
     await new Promise<void>((resolve, reject) => {
@@ -74,7 +74,7 @@ const runPresenceTests = async () => {
     });
 
     // Connect Bob Socket and listen for presence events
-    let socketBob: Socket;
+    let socketBob!: Socket;
     let presenceEventReceived = false;
     let presenceData: any = null;
 
@@ -208,7 +208,7 @@ const runPresenceTests = async () => {
     assert(disconnectPresenceReceived, 'Bob receives user_presence offline event when Alice disconnects');
 
     // Clean up
-    socketBob.disconnect();
+    socketBob?.disconnect();
 
     console.log(`\nResults: ${passed} passed, ${failed} failed.\n`);
     if (failed > 0) {

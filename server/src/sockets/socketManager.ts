@@ -54,6 +54,21 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
     // Join personal room for targeted 1-on-1 delivery
     socket.join(userId);
 
+    // Auto-join all conversation rooms user belongs to (needed for group message broadcast)
+    prisma.conversationMember
+      .findMany({
+        where: { userId },
+        select: { conversationId: true },
+      })
+      .then((memberships) => {
+        for (const { conversationId } of memberships) {
+          socket.join(`conv:${conversationId}`);
+        }
+      })
+      .catch((err) => {
+        console.error("[socket] auto-join conversations error:", err);
+      });
+
     // If this is user's first active socket, broadcast online presence
     if (wasOffline) {
       io.emit("user_presence", { userId, isOnline: true });
@@ -64,13 +79,13 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
       socket.join(`conv:${conversationId}`);
     });
 
-    // Handle outgoing direct message
+    // Handle outgoing message (both 1-on-1 and groups)
     socket.on(
       "send_message",
       async (data: {
         tempId: string;
         conversationId: string;
-        recipientId: string;
+        recipientId?: string;
         content: string;
       }) => {
         const { tempId, conversationId, recipientId, content } = data;
@@ -87,6 +102,7 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
               senderId: userId,
               content: content.trim(),
               status: "SENT",
+              type: "TEXT",
             },
             include: {
               sender: {
@@ -101,8 +117,10 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
           });
 
           socket.emit("message_ack", { tempId, message });
-          io.to(recipientId).emit("receive_message", { message, conversationId });
           socket.to(`conv:${conversationId}`).emit("receive_message", { message, conversationId });
+          if (recipientId) {
+            io.to(recipientId).emit("receive_message", { message, conversationId });
+          }
         } catch (err) {
           console.error("[socket] send_message error:", err);
           socket.emit("message_error", { tempId, error: "Failed to send message. Please try again." });
@@ -110,15 +128,21 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
       }
     );
 
-    // Handle typing events
-    socket.on("typing_start", (data: { conversationId: string; recipientId: string }) => {
+    // Handle typing events (broadcast to conversation room and recipient)
+    socket.on("typing_start", (data: { conversationId: string; recipientId?: string }) => {
       const { conversationId, recipientId } = data;
-      io.to(recipientId).emit("user_typing", { conversationId, userId, isTyping: true });
+      if (recipientId) {
+        io.to(recipientId).emit("user_typing", { conversationId, userId, isTyping: true });
+      }
+      socket.to(`conv:${conversationId}`).emit("user_typing", { conversationId, userId, isTyping: true });
     });
 
-    socket.on("typing_stop", (data: { conversationId: string; recipientId: string }) => {
+    socket.on("typing_stop", (data: { conversationId: string; recipientId?: string }) => {
       const { conversationId, recipientId } = data;
-      io.to(recipientId).emit("user_typing", { conversationId, userId, isTyping: false });
+      if (recipientId) {
+        io.to(recipientId).emit("user_typing", { conversationId, userId, isTyping: false });
+      }
+      socket.to(`conv:${conversationId}`).emit("user_typing", { conversationId, userId, isTyping: false });
     });
 
     // Handle delivery acknowledgment

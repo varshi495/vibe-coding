@@ -107,8 +107,8 @@ const runChatTests = async () => {
     assert(getConvsData[0].otherMember.id === bobId, 'Conversation contains Bob as otherMember');
 
     // 6. Socket.IO authentication test
-    let socketAlice: Socket;
-    let socketBob: Socket;
+    let socketAlice!: Socket;
+    let socketBob!: Socket;
 
     await new Promise<void>((resolve, reject) => {
       socketAlice = ioClient(socketUrl, {
@@ -193,8 +193,8 @@ const runChatTests = async () => {
     assert(getMsgsData[0].id === confirmedMessageId, 'Persisted message id matches ack id');
 
     // Clean up sockets
-    socketAlice.disconnect();
-    socketBob.disconnect();
+    socketAlice?.disconnect();
+    socketBob?.disconnect();
 
     console.log(`\nResults: ${passed} passed, ${failed} failed.\n`);
     if (failed > 0) {

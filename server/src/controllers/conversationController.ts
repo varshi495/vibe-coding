@@ -1,4 +1,4 @@
-﻿import { Response } from "express";
+import { Response } from "express";
 import { prisma } from "../config/db";
 import { AuthenticatedRequest } from "../middleware/authMiddleware";
 
@@ -45,14 +45,26 @@ export const getConversations = async (req: AuthenticatedRequest, res: Response)
           },
         });
 
-        // For 1-on-1, find the other member
-        const otherMember = conv.members.find((m) => m.userId !== userId);
+        // For 1-on-1, find the other member; for group, build groupInfo
+        const otherMember = conv.isGroup ? null : (conv.members.find((m) => m.userId !== userId)?.user ?? null);
+        const groupInfo = conv.isGroup
+          ? {
+              name: conv.name,
+              description: conv.description,
+              avatar: conv.avatar,
+              memberCount: conv.members.length,
+            }
+          : null;
 
         return {
           id: conv.id,
           isGroup: conv.isGroup,
+          name: conv.name,
+          description: conv.description,
+          avatar: conv.avatar,
           updatedAt: conv.updatedAt,
-          otherMember: otherMember?.user ?? null,
+          otherMember,
+          groupInfo,
           lastMessage: conv.messages[0] ?? null,
           unreadCount,
         };
