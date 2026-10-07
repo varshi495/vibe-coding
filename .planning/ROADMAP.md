@@ -161,7 +161,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Core Foundation & User Authentication | 0/2 | Not started | - |
+| 1. Core Foundation & User Authentication | 0/2 | Planned | - |
 | 2. Real-Time Socket Architecture & 1-on-1 Messaging | 0/2 | Not started | - |
 | 3. Presence, Typing Indicators & Delivery/Read Status | 0/2 | Not started | - |
 | 4. Group Conversations & Member Management | 0/2 | Not started | - |
