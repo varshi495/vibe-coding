@@ -188,16 +188,29 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
             if (lastMsg) {
               if (lastMsg.type === 'SYSTEM') {
                 previewText = <span className="italic text-gray-400">{lastMsg.content}</span>;
-              } else if (isGroup && lastMsg.sender?.name) {
-                const senderFirstName = lastMsg.sender.name.split(' ')[0];
-                previewText = (
-                  <span>
-                    <span className="text-[#d1d7db] font-medium">{senderFirstName}: </span>
-                    {lastMsg.content}
-                  </span>
-                );
               } else {
-                previewText = lastMsg.content;
+                let mediaLabel: string = lastMsg.content;
+                if (lastMsg.type === 'IMAGE') {
+                  mediaLabel = '📷 Photo' + (lastMsg.content ? `: ${lastMsg.content}` : '');
+                } else if (lastMsg.type === 'VIDEO') {
+                  mediaLabel = '🎥 Video' + (lastMsg.content ? `: ${lastMsg.content}` : '');
+                } else if (lastMsg.type === 'AUDIO') {
+                  mediaLabel = '🎙️ Voice message';
+                } else if (lastMsg.type === 'DOCUMENT') {
+                  mediaLabel = `📄 ${lastMsg.content || 'Document'}`;
+                }
+
+                if (isGroup && lastMsg.sender?.name) {
+                  const senderFirstName = lastMsg.sender.name.split(' ')[0];
+                  previewText = (
+                    <span>
+                      <span className="text-[#d1d7db] font-medium">{senderFirstName}: </span>
+                      {mediaLabel}
+                    </span>
+                  );
+                } else {
+                  previewText = mediaLabel;
+                }
               }
             }
 

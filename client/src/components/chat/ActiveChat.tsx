@@ -15,10 +15,17 @@ import {
   Paperclip,
   Users,
   Info,
+  Mic,
+  Loader2,
 } from 'lucide-react';
 import { format, isToday, isYesterday } from 'date-fns';
 import { Message } from '../../types/chat';
 import { GroupInfoPanel } from './GroupInfoPanel';
+import { AttachmentMenu } from './AttachmentMenu';
+import { VoiceRecorder } from './VoiceRecorder';
+import { MediaMessage } from './MediaMessage';
+import { LightboxModal } from './LightboxModal';
+import api from '../../services/api';
 
 export const ActiveChat: React.FC = () => {
   const { user } = useAuth();
@@ -28,6 +35,7 @@ export const ActiveChat: React.FC = () => {
     setActiveConversation,
     messages,
     sendMessage,
+    loadMessages,
     onlineUsers,
     typingUsers,
     typingUsersList,
@@ -38,6 +46,11 @@ export const ActiveChat: React.FC = () => {
 
   const [inputContent, setInputContent] = useState('');
   const [showGroupInfo, setShowGroupInfo] = useState(false);
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [lightboxImage, setLightboxImage] = useState<{ url: string; name?: string } | null>(null);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const typingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -56,11 +69,13 @@ export const ActiveChat: React.FC = () => {
   // Auto-scroll to bottom on new message
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentMessages]);
+  }, [currentMessages, isUploading]);
 
   // Close info panel when changing active conversation
   useEffect(() => {
     setShowGroupInfo(false);
+    setShowAttachmentMenu(false);
+    setIsRecordingVoice(false);
   }, [activeConversationId]);
 
   if (!activeConversation) {
@@ -99,11 +114,90 @@ export const ActiveChat: React.FC = () => {
     setInputContent('');
   };
 
+  // Upload and send file attachment
+  const handleSelectFile = async (file: File) => {
+    if (!activeConversationId) return;
+    if (file.size > 25 * 1024 * 1024) {
+      alert('File size exceeds the 25MB limit.');
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const uploadRes = await api.post<{
+        url: string;
+        fileName: string;
+        fileSize: number;
+        mediaType: string;
+        messageType: any;
+      }>('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      await api.post(`/conversations/${activeConversationId}/messages/media`, {
+        mediaUrl: uploadRes.url,
+        mediaType: uploadRes.mediaType,
+        fileName: uploadRes.fileName,
+        fileSize: uploadRes.fileSize,
+        type: uploadRes.messageType,
+        caption: inputContent.trim() || undefined,
+      });
+
+      setInputContent('');
+      await loadMessages(activeConversationId);
+    } catch (err: any) {
+      console.error('File upload failed:', err);
+      alert(err?.response?.data?.error || 'Failed to upload attachment');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  // Upload and send recorded voice note
+  const handleSendVoice = async (audioBlob: Blob, durationSeconds: number) => {
+    if (!activeConversationId) return;
+    setIsRecordingVoice(false);
+    setIsUploading(true);
+
+    try {
+      const fileName = `voice_${Date.now()}.webm`;
+      const formData = new FormData();
+      formData.append('file', audioBlob, fileName);
+
+      const uploadRes = await api.post<{
+        url: string;
+        fileName: string;
+        fileSize: number;
+        mediaType: string;
+        messageType: any;
+      }>('/media/upload', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+
+      await api.post(`/conversations/${activeConversationId}/messages/media`, {
+        mediaUrl: uploadRes.url,
+        mediaType: uploadRes.mediaType,
+        fileName: `Voice message (${durationSeconds}s)`,
+        fileSize: uploadRes.fileSize,
+        type: 'AUDIO',
+      });
+
+      await loadMessages(activeConversationId);
+    } catch (err: any) {
+      console.error('Failed to send voice note:', err);
+      alert('Failed to send voice note');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // Render header status/presence text
   const renderSubtitle = () => {
     if (isGroup) {
       if (typingUserIds.length > 0) {
-        // Resolve names of typing members
         const names = typingUserIds.map((id) => {
           const m = groupMemberList.find((member) => member.userId === id);
           return m ? m.name.split(' ')[0] : 'Someone';
@@ -145,7 +239,7 @@ export const ActiveChat: React.FC = () => {
       case 'DELIVERED':
         return <CheckCheck size={14} className="text-[#8696a0]" />;
       case 'READ':
-        return <CheckCheck size={14} className="text-[#53bdeb]" />; // WhatsApp Blue Double Check
+        return <CheckCheck size={14} className="text-[#53bdeb]" />;
       default:
         return <Check size={14} className="text-[#8696a0]" />;
     }
@@ -190,14 +284,15 @@ export const ActiveChat: React.FC = () => {
       }
 
       const isMe = msg.senderId === user?.id;
+      const isMedia = msg.type && msg.type !== 'TEXT';
 
       elements.push(
         <div
           key={msg.id || msg.tempId || idx}
-          className={`flex mb-1.5 ${isMe ? 'justify-end' : 'justify-start'}`}
+          className={`flex mb-2 ${isMe ? 'justify-end' : 'justify-start'}`}
         >
           <div
-            className={`relative max-w-[75%] sm:max-w-[65%] px-3 py-1.5 rounded-lg shadow-sm text-sm leading-relaxed ${
+            className={`relative max-w-[85%] sm:max-w-[70%] p-2 rounded-xl shadow-sm text-sm leading-relaxed ${
               isMe
                 ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none'
                 : 'bg-[#202c33] text-[#e9edef] rounded-tl-none'
@@ -205,15 +300,24 @@ export const ActiveChat: React.FC = () => {
           >
             {/* Sender name for group messages from others */}
             {!isMe && isGroup && msg.sender?.name && (
-              <div className="text-[11px] font-semibold text-[#00a884] mb-0.5">
+              <div className="text-[11px] font-semibold text-[#00a884] mb-1 px-1">
                 {msg.sender.name}
               </div>
             )}
 
-            <div className="whitespace-pre-wrap break-words pr-14">{msg.content}</div>
+            {/* Media Content or Plain Text */}
+            {isMedia ? (
+              <MediaMessage
+                message={msg}
+                isMe={isMe}
+                onOpenLightbox={(url, name) => setLightboxImage({ url, name })}
+              />
+            ) : (
+              <div className="whitespace-pre-wrap break-words pr-14 px-1">{msg.content}</div>
+            )}
 
             {/* Timestamp & Checkmarks */}
-            <div className="absolute bottom-1 right-2 flex items-center gap-1 text-[10px] text-[#8696a0]">
+            <div className="flex items-center justify-end gap-1 text-[10px] text-[#8696a0] mt-1 px-1">
               <span>{format(msgDate, 'h:mm a')}</span>
               {isMe && <span>{renderStatusIcon(msg.status)}</span>}
             </div>
@@ -313,50 +417,89 @@ export const ActiveChat: React.FC = () => {
           <div className="flex justify-center items-center h-full">
             <div className="bg-[#182229]/80 backdrop-blur-md text-[#8696a0] text-xs px-4 py-2 rounded-lg border border-[#222e35]">
               {isGroup
-                ? 'Welcome to the group! Send a message to start chatting.'
-                : 'No messages yet. Say hello to start the conversation!'}
+                ? 'Welcome to the group! Send a message or photo to start chatting.'
+                : 'No messages yet. Say hello or share a photo to start!'}
             </div>
           </div>
         ) : (
           renderMessagesWithDateSeparators()
         )}
+
+        {isUploading && (
+          <div className="flex justify-end mb-2 animate-pulse">
+            <div className="bg-[#005c4b]/80 text-[#e9edef] text-xs px-3.5 py-2 rounded-xl flex items-center gap-2">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Uploading attachment...</span>
+            </div>
+          </div>
+        )}
+
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Compose Bar */}
-      <form
-        onSubmit={handleSend}
-        className="h-[62px] bg-[#111b21] px-4 flex items-center gap-3 border-t border-[#222e35] flex-shrink-0"
-      >
-        <button
-          type="button"
-          className="p-2 text-[#aebac1] hover:text-[#e9edef] rounded-full hover:bg-[#202c33] transition"
-        >
-          <Smile size={22} />
-        </button>
-        <button
-          type="button"
-          className="p-2 text-[#aebac1] hover:text-[#e9edef] rounded-full hover:bg-[#202c33] transition"
-        >
-          <Paperclip size={22} />
-        </button>
+      {/* Attachment Menu Popup */}
+      <AttachmentMenu
+        isOpen={showAttachmentMenu}
+        onClose={() => setShowAttachmentMenu(false)}
+        onSelectFile={handleSelectFile}
+      />
 
-        <input
-          type="text"
-          value={inputContent}
-          onChange={handleInputChange}
-          placeholder="Type a message"
-          className="flex-1 bg-[#202c33] text-[#e9edef] placeholder-[#8696a0] text-sm px-4 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-[#00a884]/60"
+      {/* Compose Bar or Voice Recorder */}
+      {isRecordingVoice ? (
+        <VoiceRecorder
+          onSend={handleSendVoice}
+          onCancel={() => setIsRecordingVoice(false)}
         />
-
-        <button
-          type="submit"
-          disabled={!inputContent.trim()}
-          className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#008069] disabled:opacity-40 disabled:hover:bg-[#00a884] text-[#111b21] flex items-center justify-center transition shadow-md flex-shrink-0"
+      ) : (
+        <form
+          onSubmit={handleSend}
+          className="h-[62px] bg-[#111b21] px-4 flex items-center gap-3 border-t border-[#222e35] flex-shrink-0 relative"
         >
-          <SendHorizonal size={20} className="translate-x-[1px]" />
-        </button>
-      </form>
+          <button
+            type="button"
+            className="p-2 text-[#aebac1] hover:text-[#e9edef] rounded-full hover:bg-[#202c33] transition"
+          >
+            <Smile size={22} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
+            className={`p-2 rounded-full hover:bg-[#202c33] transition ${
+              showAttachmentMenu ? 'text-[#00a884] bg-[#202c33]' : 'text-[#aebac1] hover:text-[#e9edef]'
+            }`}
+            title="Attach file or photo"
+          >
+            <Paperclip size={22} />
+          </button>
+
+          <input
+            type="text"
+            value={inputContent}
+            onChange={handleInputChange}
+            placeholder="Type a message"
+            className="flex-1 bg-[#202c33] text-[#e9edef] placeholder-[#8696a0] text-sm px-4 py-2.5 rounded-lg outline-none focus:ring-1 focus:ring-[#00a884]/60"
+          />
+
+          {inputContent.trim() ? (
+            <button
+              type="submit"
+              className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#008069] text-[#111b21] flex items-center justify-center transition shadow-md flex-shrink-0"
+              title="Send message"
+            >
+              <SendHorizonal size={20} className="translate-x-[1px]" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsRecordingVoice(true)}
+              className="w-10 h-10 rounded-full bg-[#202c33] hover:bg-[#00a884] text-[#aebac1] hover:text-[#111b21] flex items-center justify-center transition shadow-md flex-shrink-0"
+              title="Record voice note"
+            >
+              <Mic size={20} />
+            </button>
+          )}
+        </form>
+      )}
 
       {/* Group Info Slide-over Panel */}
       {isGroup && (
@@ -366,6 +509,14 @@ export const ActiveChat: React.FC = () => {
           onClose={() => setShowGroupInfo(false)}
         />
       )}
+
+      {/* Lightbox Modal */}
+      <LightboxModal
+        isOpen={!!lightboxImage}
+        onClose={() => setLightboxImage(null)}
+        imageUrl={lightboxImage?.url || ''}
+        fileName={lightboxImage?.name}
+      />
     </main>
   );
 };

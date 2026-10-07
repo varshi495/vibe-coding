@@ -1,6 +1,6 @@
 export type MessageStatus = 'PENDING' | 'SENT' | 'DELIVERED' | 'READ';
 export type MemberRole = 'ADMIN' | 'MEMBER';
-export type MessageType = 'TEXT' | 'SYSTEM';
+export type MessageType = 'TEXT' | 'SYSTEM' | 'IMAGE' | 'VIDEO' | 'AUDIO' | 'DOCUMENT';
 
 export interface ChatUser {
   id: string;
@@ -37,6 +37,10 @@ export interface Message {
   sender?: ChatUser;
   content: string;
   type?: MessageType;
+  mediaUrl?: string;
+  mediaType?: string;
+  fileName?: string;
+  fileSize?: number;
   status: MessageStatus;
   createdAt: string;
 }
