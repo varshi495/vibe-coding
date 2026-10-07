@@ -1,4 +1,4 @@
-﻿import { Server as HttpServer } from "http";
+import { Server as HttpServer } from "http";
 import { Server as SocketIOServer, Socket } from "socket.io";
 import { verifyToken } from "../config/jwt";
 import { prisma } from "../config/db";
@@ -7,6 +7,14 @@ let io: SocketIOServer;
 
 interface AuthSocket extends Socket {
   userId: string;
+}
+
+// Track active socket IDs for each userId: Map<userId, Set<socketId>>
+const userSockets = new Map<string, Set<string>>();
+
+export function isUserOnline(userId: string): boolean {
+  const sockets = userSockets.get(userId);
+  return !!sockets && sockets.size > 0;
 }
 
 export function initializeSocket(httpServer: HttpServer): SocketIOServer {
@@ -35,8 +43,21 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
     const userId = authSocket.userId;
     console.log(`[socket] User ${userId} connected: ${socket.id}`);
 
+    // Track active connection
+    if (!userSockets.has(userId)) {
+      userSockets.set(userId, new Set());
+    }
+    const userSet = userSockets.get(userId)!;
+    const wasOffline = userSet.size === 0;
+    userSet.add(socket.id);
+
     // Join personal room for targeted 1-on-1 delivery
     socket.join(userId);
+
+    // If this is user's first active socket, broadcast online presence
+    if (wasOffline) {
+      io.emit("user_presence", { userId, isOnline: true });
+    }
 
     // Join a conversation room
     socket.on("join_conversation", ({ conversationId }: { conversationId: string }) => {
@@ -89,8 +110,79 @@ export function initializeSocket(httpServer: HttpServer): SocketIOServer {
       }
     );
 
-    socket.on("disconnect", (reason) => {
+    // Handle typing events
+    socket.on("typing_start", (data: { conversationId: string; recipientId: string }) => {
+      const { conversationId, recipientId } = data;
+      io.to(recipientId).emit("user_typing", { conversationId, userId, isTyping: true });
+    });
+
+    socket.on("typing_stop", (data: { conversationId: string; recipientId: string }) => {
+      const { conversationId, recipientId } = data;
+      io.to(recipientId).emit("user_typing", { conversationId, userId, isTyping: false });
+    });
+
+    // Handle delivery acknowledgment
+    socket.on("mark_delivered", async (data: { messageId: string; conversationId: string; senderId: string }) => {
+      const { messageId, conversationId, senderId } = data;
+      try {
+        await prisma.message.updateMany({
+          where: { id: messageId, status: "SENT" },
+          data: { status: "DELIVERED" },
+        });
+        io.to(senderId).emit("message_status_update", { messageId, conversationId, status: "DELIVERED" });
+      } catch (err) {
+        console.error("[socket] mark_delivered error:", err);
+      }
+    });
+
+    // Handle read acknowledgment
+    socket.on("mark_read", async (data: { conversationId: string; senderId: string }) => {
+      const { conversationId, senderId } = data;
+      try {
+        await prisma.message.updateMany({
+          where: {
+            conversationId,
+            senderId,
+            status: { not: "READ" },
+          },
+          data: { status: "READ" },
+        });
+
+        await prisma.conversationMember.updateMany({
+          where: { conversationId, userId },
+          data: { lastReadAt: new Date() },
+        });
+
+        io.to(senderId).emit("message_status_update", {
+          conversationId,
+          status: "READ",
+          readerId: userId,
+        });
+      } catch (err) {
+        console.error("[socket] mark_read error:", err);
+      }
+    });
+
+    // Handle disconnect
+    socket.on("disconnect", async (reason) => {
       console.log(`[socket] User ${userId} disconnected (${reason}): ${socket.id}`);
+      const set = userSockets.get(userId);
+      if (set) {
+        set.delete(socket.id);
+        if (set.size === 0) {
+          userSockets.delete(userId);
+          const lastSeen = new Date();
+          try {
+            await prisma.user.update({
+              where: { id: userId },
+              data: { lastSeen },
+            });
+          } catch (err) {
+            console.error("[socket] lastSeen update error:", err);
+          }
+          io.emit("user_presence", { userId, isOnline: false, lastSeen: lastSeen.toISOString() });
+        }
+      }
     });
   });
 

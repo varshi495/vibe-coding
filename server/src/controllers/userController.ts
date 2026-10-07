@@ -36,3 +36,36 @@ export const searchUsers = async (req: AuthenticatedRequest, res: Response): Pro
     res.status(500).json({ error: "Search failed" });
   }
 };
+
+// GET /api/users/presence?ids=id1,id2 — batch lookup of user presence & lastSeen
+export const getUserPresence = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+  const idsParam = (req.query.ids as string) || "";
+  const userIds = idsParam
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+
+  if (userIds.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  try {
+    const { isUserOnline } = await import("../sockets/socketManager");
+    const users = await prisma.user.findMany({
+      where: { id: { in: userIds } },
+      select: { id: true, lastSeen: true },
+    });
+
+    const presenceList = users.map((u) => ({
+      id: u.id,
+      isOnline: isUserOnline(u.id),
+      lastSeen: u.lastSeen,
+    }));
+
+    res.json(presenceList);
+  } catch (err) {
+    console.error("[userController] getUserPresence error:", err);
+    res.status(500).json({ error: "Failed to fetch presence" });
+  }
+};
