@@ -9,7 +9,15 @@ import { ChatUser } from '../../types/chat';
 
 export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfile }) => {
   const { user, logout } = useAuth();
-  const { conversations, activeConversationId, setActiveConversation, loadMessages, startConversationWithUser } = useSocket();
+  const {
+    conversations,
+    activeConversationId,
+    setActiveConversation,
+    loadMessages,
+    startConversationWithUser,
+    typingUsers,
+    onlineUsers,
+  } = useSocket();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [showNewChatPanel, setShowNewChatPanel] = useState(false);
@@ -152,7 +160,12 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
                   isActive ? 'bg-[#2a3942]' : ''
                 }`}
               >
-                <Avatar name={other.name} src={other.avatar} size="md" />
+                <Avatar
+                  name={other.name}
+                  src={other.avatar}
+                  size="md"
+                  showOnline={other.id ? onlineUsers[other.id]?.isOnline : false}
+                />
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between mb-0.5">
@@ -164,7 +177,11 @@ export const ChatList: React.FC<{ onOpenProfile?: () => void }> = ({ onOpenProfi
 
                   <div className="flex items-center justify-between">
                     <p className="text-xs text-[#8696a0] truncate max-w-[200px]">
-                      {conv.lastMessage?.content || <span className="italic">No messages yet</span>}
+                      {typingUsers[conv.id] ? (
+                        <span className="text-[#00a884] font-medium animate-pulse">typing...</span>
+                      ) : (
+                        conv.lastMessage?.content || <span className="italic">No messages yet</span>
+                      )}
                     </p>
                     {conv.unreadCount > 0 && (
                       <span className="bg-[#00a884] text-[#111b21] font-bold text-[11px] h-5 min-w-[20px] px-1.5 rounded-full flex items-center justify-center flex-shrink-0 ml-2">

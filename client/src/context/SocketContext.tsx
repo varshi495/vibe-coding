@@ -2,7 +2,12 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import { io, Socket } from 'socket.io-client';
 import { useAuth } from './AuthContext';
 import api from '../services/api';
-import { Conversation, Message } from '../types/chat';
+import { Conversation, Message, MessageStatus } from '../types/chat';
+
+export interface UserPresence {
+  isOnline: boolean;
+  lastSeen?: string;
+}
 
 interface SocketContextType {
   connected: boolean;
@@ -15,6 +20,10 @@ interface SocketContextType {
   loadMessages: (conversationId: string) => Promise<void>;
   startConversationWithUser: (recipientId: string) => Promise<string>;
   activeConversation: Conversation | null;
+  onlineUsers: Record<string, UserPresence>;
+  typingUsers: Record<string, boolean>; // conversationId -> isTyping
+  sendTypingStart: (conversationId: string, recipientId: string) => void;
+  sendTypingStop: (conversationId: string, recipientId: string) => void;
 }
 
 const SocketContext = createContext<SocketContextType | undefined>(undefined);
@@ -26,7 +35,9 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
   const [messages, setMessages] = useState<Record<string, Message[]>>({});
-  
+  const [onlineUsers, setOnlineUsers] = useState<Record<string, UserPresence>>({});
+  const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
+
   const activeConvIdRef = useRef<string | null>(null);
   activeConvIdRef.current = activeConversationId;
 
@@ -36,36 +47,61 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     try {
       const data = await api.get<Conversation[]>('/conversations');
       setConversations(data);
+
+      // Fetch initial presence for all member contacts
+      const contactIds = data.map((c) => c.otherMember?.id).filter(Boolean);
+      if (contactIds.length > 0) {
+        const presenceList = await api.get<{ id: string; isOnline: boolean; lastSeen?: string }[]>(
+          `/users/presence?ids=${contactIds.join(',')}`
+        );
+        const presenceMap: Record<string, UserPresence> = {};
+        presenceList.forEach((p) => {
+          presenceMap[p.id] = { isOnline: p.isOnline, lastSeen: p.lastSeen };
+        });
+        setOnlineUsers((prev) => ({ ...prev, ...presenceMap }));
+      }
     } catch (err) {
       console.error('Failed to fetch conversations:', err);
     }
   }, [token]);
 
-  // 2. Load messages for a conversation
-  const loadMessages = useCallback(async (conversationId: string) => {
-    if (!token) return;
-    try {
-      const data = await api.get<Message[]>(`/conversations/${conversationId}/messages`);
-      setMessages((prev) => ({
-        ...prev,
-        [conversationId]: data,
-      }));
-      // Mark as read in backend & reset unread count locally
-      await api.put(`/conversations/${conversationId}/read`);
-      setConversations((prev) =>
-        prev.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
-      );
-    } catch (err) {
-      console.error('Failed to load messages:', err);
-    }
-  }, [token]);
+  // 2. Load messages for a conversation & send read receipt
+  const loadMessages = useCallback(
+    async (conversationId: string) => {
+      if (!token) return;
+      try {
+        const data = await api.get<Message[]>(`/conversations/${conversationId}/messages`);
+        setMessages((prev) => ({
+          ...prev,
+          [conversationId]: data,
+        }));
+        // Mark as read in backend & reset unread count locally
+        await api.put(`/conversations/${conversationId}/read`);
+        setConversations((prev) =>
+          prev.map((c) => (c.id === conversationId ? { ...c, unreadCount: 0 } : c))
+        );
+
+        // Find other member and emit mark_read over socket
+        const conv = conversations.find((c) => c.id === conversationId);
+        if (conv?.otherMember?.id && socket) {
+          socket.emit('mark_read', { conversationId, senderId: conv.otherMember.id });
+        }
+      } catch (err) {
+        console.error('Failed to load messages:', err);
+      }
+    },
+    [token, socket, conversations]
+  );
 
   // 3. Start or retrieve a conversation with a recipient
-  const startConversationWithUser = useCallback(async (recipientId: string): Promise<string> => {
-    const conv = await api.post<Conversation>('/conversations', { recipientId });
-    await fetchConversations();
-    return conv.id;
-  }, [fetchConversations]);
+  const startConversationWithUser = useCallback(
+    async (recipientId: string): Promise<string> => {
+      const conv = await api.post<Conversation>('/conversations', { recipientId });
+      await fetchConversations();
+      return conv.id;
+    },
+    [fetchConversations]
+  );
 
   // 4. Initialize Socket.IO connection
   useEffect(() => {
@@ -75,9 +111,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return;
     }
 
-    const socketUrl = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:5000'
-      : window.location.origin;
+    const socketUrl =
+      window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:5000'
+        : window.location.origin;
 
     const newSocket = io(socketUrl, {
       auth: { token },
@@ -94,14 +131,29 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setConnected(false);
     });
 
+    // Presence update
+    newSocket.on('user_presence', (data: { userId: string; isOnline: boolean; lastSeen?: string }) => {
+      setOnlineUsers((prev) => ({
+        ...prev,
+        [data.userId]: { isOnline: data.isOnline, lastSeen: data.lastSeen },
+      }));
+    });
+
+    // Typing update
+    newSocket.on('user_typing', (data: { conversationId: string; userId: string; isTyping: boolean }) => {
+      setTypingUsers((prev) => ({
+        ...prev,
+        [data.conversationId]: data.isTyping,
+      }));
+    });
+
     // Event: receive_message
     newSocket.on('receive_message', (payload: { message: Message; conversationId: string }) => {
       const { message, conversationId } = payload;
 
-      // Update message list for this conversation
+      // Update message list
       setMessages((prev) => {
         const list = prev[conversationId] || [];
-        // Deduplicate if already exists
         if (list.some((m) => m.id === message.id)) return prev;
         return {
           ...prev,
@@ -109,32 +161,48 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         };
       });
 
+      // Auto-emit mark_delivered back to sender
+      newSocket.emit('mark_delivered', {
+        messageId: message.id,
+        conversationId,
+        senderId: message.senderId,
+      });
+
+      // If this conversation is currently open, mark read immediately
+      if (activeConvIdRef.current === conversationId) {
+        newSocket.emit('mark_read', {
+          conversationId,
+          senderId: message.senderId,
+        });
+      }
+
       // Update conversation list item
       setConversations((prev) => {
         const isActive = activeConvIdRef.current === conversationId;
         const exists = prev.some((c) => c.id === conversationId);
 
         if (!exists) {
-          // Refresh list to grab new conversation
           fetchConversations();
           return prev;
         }
 
-        return prev.map((c) => {
-          if (c.id === conversationId) {
-            return {
-              ...c,
-              lastMessage: {
-                content: message.content,
-                createdAt: message.createdAt,
-                senderId: message.senderId,
-              },
-              unreadCount: isActive ? 0 : c.unreadCount + 1,
-              updatedAt: message.createdAt,
-            };
-          }
-          return c;
-        }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+        return prev
+          .map((c) => {
+            if (c.id === conversationId) {
+              return {
+                ...c,
+                lastMessage: {
+                  content: message.content,
+                  createdAt: message.createdAt,
+                  senderId: message.senderId,
+                },
+                unreadCount: isActive ? 0 : c.unreadCount + 1,
+                updatedAt: message.createdAt,
+              };
+            }
+            return c;
+          })
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
       });
     });
 
@@ -150,6 +218,28 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       });
     });
 
+    // Event: message_status_update (DELIVERED or READ)
+    newSocket.on(
+      'message_status_update',
+      (payload: { messageId?: string; conversationId: string; status: 'DELIVERED' | 'READ'; readerId?: string }) => {
+        const { messageId, conversationId, status } = payload;
+
+        setMessages((prev) => {
+          const list = prev[conversationId] || [];
+          const updated: Message[] = list.map((m) => {
+            if (messageId && m.id === messageId) {
+              return { ...m, status: status as MessageStatus };
+            }
+            if (!messageId && status === 'READ' && m.senderId === user.id) {
+              return { ...m, status: 'READ' as MessageStatus };
+            }
+            return m;
+          });
+          return { ...prev, [conversationId]: updated };
+        });
+      }
+    );
+
     setSocket(newSocket);
     fetchConversations();
 
@@ -158,7 +248,26 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   }, [token, user, fetchConversations]);
 
-  // 5. Send message with optimistic update
+  // Typing helper emitters
+  const sendTypingStart = useCallback(
+    (conversationId: string, recipientId: string) => {
+      if (socket) {
+        socket.emit('typing_start', { conversationId, recipientId });
+      }
+    },
+    [socket]
+  );
+
+  const sendTypingStop = useCallback(
+    (conversationId: string, recipientId: string) => {
+      if (socket) {
+        socket.emit('typing_stop', { conversationId, recipientId });
+      }
+    },
+    [socket]
+  );
+
+  // Send message
   const sendMessage = useCallback(
     (conversationId: string, recipientId: string, content: string) => {
       if (!socket || !user || !content.trim()) return;
@@ -177,31 +286,30 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         createdAt: new Date().toISOString(),
       };
 
-      // Append optimistic bubble immediately
       setMessages((prev) => ({
         ...prev,
         [conversationId]: [...(prev[conversationId] || []), optimisticMsg],
       }));
 
-      // Update last message in sidebar immediately
       setConversations((prev) =>
-        prev.map((c) => {
-          if (c.id === conversationId) {
-            return {
-              ...c,
-              lastMessage: {
-                content: trimmedContent,
-                createdAt: optimisticMsg.createdAt,
-                senderId: user.id,
-              },
-              updatedAt: optimisticMsg.createdAt,
-            };
-          }
-          return c;
-        }).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+        prev
+          .map((c) => {
+            if (c.id === conversationId) {
+              return {
+                ...c,
+                lastMessage: {
+                  content: trimmedContent,
+                  createdAt: optimisticMsg.createdAt,
+                  senderId: user.id,
+                },
+                updatedAt: optimisticMsg.createdAt,
+              };
+            }
+            return c;
+          })
+          .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
       );
 
-      // Emit to server
       socket.emit('send_message', {
         tempId,
         conversationId,
@@ -227,6 +335,10 @@ export const SocketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         loadMessages,
         startConversationWithUser,
         activeConversation,
+        onlineUsers,
+        typingUsers,
+        sendTypingStart,
+        sendTypingStop,
       }}
     >
       {children}
