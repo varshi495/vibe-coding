@@ -99,8 +99,8 @@ Plans:
 **Plans**: 2 plans
 
 Plans:
-- [ ] 05-01: Multer upload middleware, Cloudinary/local media service, attachment validation, and media message DB persistence.
-- [ ] 05-02: Client attachment picker, image/video/doc preview components, and Web Audio MediaRecorder voice note recording UI.
+- [x] 05-01: Multer upload middleware, Cloudinary/local media service, attachment validation, and media message DB persistence.
+- [x] 05-02: Client attachment picker, image/video/doc preview components, and Web Audio MediaRecorder voice note recording UI.
 
 ### Phase 6: Interactive Message Controls
 **Goal:** Deliver interactive message operations: emoji reactions with counters, quoted replies, edit with timestamps, deletion tombstones, and message forwarding.
