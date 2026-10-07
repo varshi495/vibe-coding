@@ -23,7 +23,7 @@ See: .planning/PROJECT.md (updated 2026-10-07)
 Phase: 1 of 8 (Core Foundation & User Authentication)
 Plan: 0 of 2 in current phase
 Status: Ready to plan
-Last activity: 2026-10-07 — Phase 1 context gathered and captured
+Last activity: 2026-10-07 — Phase 1 UI design contract (UI-SPEC.md) approved
 
 Progress: [░░░░░░░░░░] 0%
 
